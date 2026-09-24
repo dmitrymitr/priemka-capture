@@ -1,0 +1,52 @@
+name: Android APK
+on:
+  workflow_dispatch:
+  push:
+    tags: ['v*']
+permissions:
+  contents: read
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+      - uses: android-actions/setup-android@v3
+      - run: npm ci --no-fund --no-audit
+      - run: npx cap sync android
+      - name: Restore signing key
+        env:
+          ANDROID_KEYSTORE: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANDROID_KEYSTORE"
+          printf '%s' "$ANDROID_KEYSTORE" | base64 --decode > "$RUNNER_TEMP/priemka.jks"
+      - name: Build signed APK and run checks
+        working-directory: android
+        env:
+          PRIEMKA_KEYSTORE: ${{ runner.temp }}/priemka.jks
+          PRIEMKA_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleRelease lintRelease testReleaseUnitTest
+      - name: Verify APK signature
+        run: |
+          "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose android/app/build/outputs/apk/release/app-release.apk
+          mkdir -p output
+          cp android/app/build/outputs/apk/release/app-release.apk output/Priemka-0.1.0.apk
+          sha256sum output/Priemka-0.1.0.apk > output/SHA256SUMS.txt
+      - uses: actions/upload-artifact@v4
+        with:
+          name: priemka-apk
+          path: output/
+          retention-days: 30
+      - name: Remove signing key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/priemka.jks"

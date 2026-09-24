@@ -1,0 +1,7 @@
+{
+  "appId": "ru.dmitrymitr.priemka",
+  "appName": "Приёмка",
+  "webDir": "docs",
+  "server": {"androidScheme": "https"},
+  "android": {"allowMixedContent": false, "webContentsDebuggingEnabled": false, "backgroundColor": "#132d39"}
+}
