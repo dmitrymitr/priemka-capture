@@ -43,8 +43,8 @@ jobs:
         run: |
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose android/app/build/outputs/apk/release/app-release.apk
           mkdir -p output
-          cp android/app/build/outputs/apk/release/app-release.apk output/Priemka-0.1.0.apk
-          sha256sum output/Priemka-0.1.0.apk > output/SHA256SUMS.txt
+          cp android/app/build/outputs/apk/release/app-release.apk output/Priemka-0.2.0.apk
+          sha256sum output/Priemka-0.2.0.apk > output/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: priemka-apk
