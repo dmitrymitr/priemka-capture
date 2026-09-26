@@ -3,3 +3,5 @@
 
 .actions{display:flex;flex-wrap:wrap;gap:10px;margin:18px 0}.actions>button{flex:1;min-width:200px}.end{background:#f4e5d8;color:#71421a}footer,.version,#context,#tourMeta{font-size:14px;color:#536976}#message:empty{display:none}.roomBanner{background:#dfe9ef;border-radius:14px;padding:16px;margin-bottom:16px}.roomBanner h1{font-size:24px;overflow-wrap:anywhere;margin:4px 0 14px}.tourCard,.roomCard{background:white;border:1px solid #cbd6dc;border-radius:14px;padding:16px;margin:14px 0}.tourCard h2,.roomCard h3{margin:0 0 8px;overflow-wrap:anywhere}.tourCard p,.roomCard p{margin:8px 0}.tourCard button,.roomCard button{margin-right:8px;margin-top:8px}.version{align-self:center}#records img{max-width:100%;max-height:380px;display:block;margin:12px auto}#records button{width:100%}#message.error{background:#ffe9e9;padding:12px;border-radius:8px}dialog form p{font-size:14px}footer{margin-top:24px}#context{overflow-wrap:anywhere}
 .dialogError{background:#ffe9e9;color:#a52135;padding:12px;border-radius:8px}
+
+body{padding-bottom:env(safe-area-inset-bottom)}header{padding-top:max(18px,env(safe-area-inset-top))}footer a{color:#1a536e}
