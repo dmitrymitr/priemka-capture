@@ -34,9 +34,9 @@ async function migrateTours(){
 
 function screen(name){view=name;for(const id of ['home','tour','capture'])$(id+'View').hidden=id!==name;msg('');window.scrollTo(0,0);}
 function element(tag,text){const el=document.createElement(tag);el.textContent=text;return el;}
-function button(text,action,cls='secondary'){const b=element('button',text);b.className=cls;b.onclick=()=>guarded(action);return b;}
+function button(text,action,cls='secondary'){const b=element('button',text);b.type='button';b.dataset.guarded='true';b.disabled=busy;b.className=cls;b.onclick=()=>guarded(action);return b;}
 async function guarded(action){
- if(busy||recordPending)return;
+ if(busy)return;
  busy=true;controls();
  try{await action();}catch(e){fail(e);}finally{busy=false;controls();}
 }
@@ -70,6 +70,7 @@ async function tourView(){
  for(const room of activeTour.rooms){
   const rows=notes.filter(n=>n.roomId===room.id),card=element('article','');card.className='roomCard';
   card.append(element('h3',room.name),element('p',`${room.status==='completed'?'Осмотр закончен':'В работе'} · замечаний: ${rows.length}${draft.roomId===room.id&&hasDraft()?' · есть черновик':''}`),button('Посмотреть замечания',()=>showList(room.id)));
+  card.append(button('＋ Добавить замечание',()=>openEditor(null,room.id)));
   if(editable)card.append(button(room.id===activeTour.activeRoomId?'Продолжить':'Вернуться в помещение',()=>changeRoom(room.id)));
   $('roomsList').append(card);
  }
@@ -80,7 +81,7 @@ async function captureView(){
  if(draft.media.some(m=>m.interrupted))msg('В черновике есть прерванная запись. Прослушай её и допиши при необходимости.',true);
 }
 async function prepareDraft(){
- await stopAudio();await queue;
+ await queue;
  if(fault)throw Error('Сохранение прерывалось. Выгрузи доступные записи и перезапусти приложение.');
  if(!activeTour||activeTour.status!=='active')throw Error('Этот обход уже завершён. Начни новый обход.');
  if(hasDraft()&&!activeRoom())throw Error('Не выбрано помещение для черновика.');
@@ -93,7 +94,7 @@ async function commitCapture(nextTour=activeTour){
  const next=fresh({object:nextTour.object,author:nextTour.author,section:nextTour.section,tourId:nextTour.id,roomId:room?.id||null,location:room?.name||''});
  ops.push(tourOp(nextTour),...draftOps(next,nextTour));
  await enqueue(ops);
- activeTour=nextTour;draft=next;$('text').value='';$('timer').textContent='00:00';$('record').textContent='● Начать голосовую запись';
+ activeTour=nextTour;draft=next;$('text').value='';
 }
 async function changeRoom(existingId,newName){
  await prepareDraft();
@@ -109,7 +110,7 @@ async function changeRoom(existingId,newName){
 async function endRoom(){
  await prepareDraft();const next=structuredClone(activeTour),room=next.rooms.find(r=>r.id===next.activeRoomId);
  if(room){room.status='completed';room.completed=new Date().toISOString();}next.activeRoomId=null;
- await commitCapture(next);await tourView();msg('Помещение завершено. Можно начать следующее или закончить обход.');
+ await commitCapture(next);await tourView();msg('Замечание сохранено. Ты в обзоре обхода: можно продолжить другое помещение или завершить обход.');
 }
 async function endTour(){
  await prepareDraft();const next=structuredClone(activeTour),now=new Date().toISOString();
@@ -117,7 +118,7 @@ async function endTour(){
  next.activeRoomId=null;next.status='completed';next.completed=now;
  await commitCapture(next);await showHome();await exportUI();
 }
-async function roomDialog(){await stopAudio();await stash();$('roomName').value='';$('roomDialog').showModal();$('roomName').focus();}
+async function roomDialog(){await stash();$('roomName').value='';$('roomDialog').showModal();$('roomName').focus();}
 function bindTours(){
  $('newTour').onclick=()=>guarded(async()=>{const ctx=(await read('state','context'))?.data||{};for(const k of fields)$(k).value=k==='location'?'':ctx[k]||'';$('newDialog').showModal();});
  $('newForm').onsubmit=e=>{e.preventDefault();guarded(async()=>{
@@ -133,7 +134,7 @@ function bindTours(){
  for(const d of document.querySelectorAll('dialog')){d.addEventListener('cancel',e=>{if(busy)e.preventDefault();});d.addEventListener('close',()=>d.querySelector('.dialogError')?.remove());}
  $('nextRoom').onclick=()=>guarded(roomDialog);$('startRoom').onclick=()=>guarded(roomDialog);
  $('endRoom').onclick=()=>guarded(endRoom);$('endTour').onclick=()=>guarded(endTour);$('endTourOverview').onclick=()=>guarded(endTour);
- $('backTour').onclick=()=>guarded(async()=>{await stopAudio();await stash();await tourView();});
+ $('backTour').onclick=()=>guarded(async()=>{await stash();await tourView();});
  $('homeButton').onclick=()=>guarded(async()=>{await stash();await showHome();});
  $('resumeRoom').onclick=()=>guarded(captureView);$('overviewList').onclick=()=>showList().catch(fail);
 }

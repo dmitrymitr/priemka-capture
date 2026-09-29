@@ -33,9 +33,9 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42
  await create('Test project B','Room B');await text('Independent draft B');await page.click('#backTour');await page.click('#homeButton');
  await page.locator('.tourCard').filter({hasText:'Test project A'}).getByRole('button').click();await page.click('#overviewList');await page.locator('#listDialog').waitFor({state:'visible'});assert.equal(await page.locator('#records article').count(),4);await page.locator('#records button').first().click();await page.locator('#records img').waitFor();assert.equal(await page.locator('#records img').count(),1);await page.click('#closeList');
  await page.click('#homeButton');await page.locator('.tourCard').filter({hasText:'Test project B'}).getByRole('button').click();await page.click('#resumeRoom');assert.equal(await page.inputValue('#text'),'Independent draft B');
- // Finishing an active voice recording during a room transition saves it to the old room.
- await page.click('#record');await page.waitForFunction(()=>!!recorder&&recorder.state==='recording');await page.waitForTimeout(1200);
- await page.click('#nextRoom');await page.fill('#roomName','Room C');await page.click('#saveRoom');await page.waitForFunction(()=>document.querySelector('#roomTitle').textContent==='Room C');data=await snap();const audioNote=data.notes.find(n=>n.object==='Test project B');assert.equal(audioNote.location,'Room B');assert(audioNote.media.some(m=>m.kind==='audio'&&m.size>0));
+ // Room transition saves the dictated text without an audio recorder.
+ assert.equal(await page.locator('#record').count(),0);
+ await page.click('#nextRoom');await page.fill('#roomName','Room C');await page.click('#saveRoom');await page.waitForFunction(()=>document.querySelector('#roomTitle').textContent==='Room C');data=await snap();const textNote=data.notes.find(n=>n.object==='Test project B');assert.equal(textNote.location,'Room B');assert.equal(textNote.text,'Independent draft B');
  // Empty room / tour completion must not manufacture observations.
  await page.click('#endTour');await page.locator('#exportDialog').waitFor({state:'visible'});await page.click('#closeExport');data=await snap();assert.equal(data.notes.length,5);
  await create('No findings','Empty room');await page.click('#endTour');await page.locator('#exportDialog').waitFor({state:'visible'});assert.match(await page.locator('#parts').innerText(),/0 замечаний/);await page.click('#closeExport');
@@ -58,6 +58,6 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42
  assert.equal(migrated.notes[0].id,'old-note');assert.equal(migrated.notes[0].text,'Original text');assert.equal(migrated.blob,'abc');assert.equal(migrated.tours.length,1);
  await old.locator('.tourCard button').click();await old.click('#resumeRoom');assert.equal(await old.inputValue('#text'),'Original draft');await old.reload();await old.locator('.tourCard').waitFor();assert.equal(await old.evaluate(async()=>(await getTours()).length),1);
  await legacy.close();
- console.log('PASS: room transitions, revisit, draft recovery, failed-save recovery, tour isolation, photo review, live audio transition, ZIP download, empty tours, offline reload, v1 migration and idempotence.');
+ console.log('PASS: room transitions, revisit, draft recovery, failed-save recovery, tour isolation, photo review, text-only transition, ZIP download, empty tours, offline reload, v1 migration and idempotence.');
  }finally{await browser.close();}
 })().catch(e=>{console.error(e);process.exit(1);});
