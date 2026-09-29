@@ -3,14 +3,15 @@ window.isPriemkaNative = () => !!window.Capacitor?.isNativePlatform?.();
 window.shareNativeArchive = async (blob, filename) => {
   const fs = window.Capacitor.registerPlugin('Filesystem');
   const share = window.Capacitor.registerPlugin('Share');
-  const path = `exports/${Date.now()}-${filename}`;
+  const folder = `exports/${Date.now()}-${crypto.randomUUID().slice(0,8)}`;
+  const path = `${folder}/${filename}`;
   const base64 = part => new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result).split(',')[1]);
     reader.onerror = () => reject(reader.error);
     reader.readAsDataURL(part);
   });
-  await fs.mkdir({path:'exports',directory:'CACHE',recursive:true}).catch(()=>{});
+  await fs.mkdir({path:folder,directory:'CACHE',recursive:true});
   const chunkSize = 512 * 1024;
   for (let offset=0; offset<blob.size; offset+=chunkSize) {
     const options = {path, directory:'CACHE', data:await base64(blob.slice(offset,offset+chunkSize))};

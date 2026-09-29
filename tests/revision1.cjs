@@ -45,7 +45,9 @@ const png=Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42
  await Promise.all([p.waitForEvent('dialog').then(d=>d.accept()),first().getByRole('button',{name:'Удалить',exact:true}).click()]);await p.waitForFunction(()=>document.querySelectorAll('#records article').length===2);
  assert.equal(await p.evaluate(async id=>!!(await read('notes',id)),original.id),false);
  assert.equal(await p.evaluate(id=>activeTour.deletedNotes[0].id,original.id),original.id);
- await p.click('#closeList');await p.click('#export');const download=p.waitForEvent('download');await p.locator('#parts button').first().click();await(await download).saveAs(process.env.REVISION_ZIP_OUTPUT||'revision1.zip');await p.click('#closeExport');
+ await p.click('#closeList');await p.click('#export');const download=p.waitForEvent('download');await p.locator('#parts button').first().click();const downloaded=await download;assert.match(downloaded.suggestedFilename(),/^Revision 1_\d{2}\.\d{2}\.\d{4}_АР_обход-[a-f0-9]{8}_часть-1\.zip$/);await downloaded.saveAs(process.env.REVISION_ZIP_OUTPUT||'revision1.zip');await p.click('#closeExport');
+ const names=await p.evaluate(()=>[archiveName({object:'ФФЦ Казань',section:'АР',created:'2026-09-29T12:00:00Z',id:'842511dd-123'},2),archiveName({object:'../<>:*?"|\\/'+ '🧱'.repeat(200),section:'ОВ/иК'+ 'Я'.repeat(150),created:'2026-09-29T12:00:00Z',id:'12345678'},1)]);
+ assert.equal(names[0],'ФФЦ Казань_29.09.2026_АР_обход-842511dd_часть-2.zip');assert(!/[<>:"/\\|?*]/.test(names[1]));assert(Buffer.byteLength(names[1],'utf8')<255);
  // An active capture draft survives editing another saved note.
  await p.click('#homeButton');await p.click('#newTour');await p.fill('#object','Active');await p.fill('#location','A');await p.click('#saveTour');
  await p.fill('#text','Saved active note');await p.click('#finish');await p.waitForFunction(()=>document.querySelector('#count').textContent==='1');await p.fill('#text','Active draft stays');
