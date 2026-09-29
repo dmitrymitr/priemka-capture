@@ -1,0 +1,83 @@
+name: Publish verified APK
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: Successful Android APK run
+        required: true
+      tag:
+        description: Existing release tag
+        required: true
+permissions:
+  contents: write
+  actions: read
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.tag }}
+      - name: Verify build identity
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+        run: |
+          gh run view "$RUN_ID" --json conclusion,headSha > /tmp/run.json
+          python3 - <<'PY'
+          import json,subprocess
+          run=json.load(open('/tmp/run.json'))
+          assert run['conclusion']=='success'
+          assert run['headSha']==subprocess.check_output(['git','rev-parse','HEAD']).decode().strip()
+          PY
+      - uses: actions/download-artifact@v4
+        with:
+          name: priemka-apk
+          path: output
+          github-token: ${{ github.token }}
+          run-id: ${{ inputs.run_id }}
+      - name: Verify checksum, packaged sources and previous certificate
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          sha256sum -c output/SHA256SUMS.txt
+          mkdir previous
+          gh release download v0.2.0 --pattern '*.apk' --dir previous
+          APK="output/Priemka-${RELEASE_TAG#v}.apk"
+          SIGNER=$(find "$ANDROID_HOME/build-tools" -name apksigner | sort -V | tail -1)
+          "$SIGNER" verify --print-certs "$APK" > /tmp/new-cert.txt
+          "$SIGNER" verify --print-certs previous/Priemka-0.2.0.apk > /tmp/old-cert.txt
+          diff <(grep 'Signer #1 certificate SHA-256 digest' /tmp/old-cert.txt) <(grep 'Signer #1 certificate SHA-256 digest' /tmp/new-cert.txt)
+          export APK
+          python3 - <<'PY'
+          import os,zipfile,json
+          from pathlib import Path
+          with zipfile.ZipFile(os.environ['APK']) as z:
+              assert z.testzip() is None
+              for name in ['app.js','editor.js','tours.js','native.js','index.html','style.css','zip.js','iphone.html']:
+                  assert z.read('assets/public/'+name)==Path('docs',name).read_bytes(),name
+              assert json.loads(z.read('assets/capacitor.config.json'))['appId']=='ru.dmitrymitr.priemka'
+          print('Verified checksum, archive CRC, release source files, app ID and unchanged signing certificate.')
+          PY
+      - name: Publish release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ inputs.tag }}
+        run: |
+          cat > /tmp/notes.md <<'EOF'
+          Первая рабочая ревизия «Приёмки».
+
+          - Отдельная аудиозапись убрана; диктуйте текст микрофоном клавиатуры. Прежние аудиовложения сохранены.
+          - В «Мои обходы» доступны редактирование текста, помещения и фото, удаление с подтверждением и добавление замечаний, включая завершённые обходы.
+          - «Сохранить и к обзору обхода» заменяет неясное «Закончить помещение».
+          - ZIP: объект, дата обхода, раздел, короткий код обхода и номер части.
+
+          Установите APK поверх прежней версии, не удаляя её. Ключ подписи и идентификатор приложения сохранены. Перед обновлением выгрузите резервный ZIP.
+
+          После исправлений выгрузите все части ZIP заново. Старые архивы не изменяются.
+
+          [Веб-приложение](https://dmitrymitr.github.io/priemka-capture/) · [Инструкция iPhone/iPad](https://dmitrymitr.github.io/priemka-capture/iphone.html).
+          EOF
+          gh release create "$RELEASE_TAG" "output/Priemka-${RELEASE_TAG#v}.apk" output/SHA256SUMS.txt --verify-tag --title "Приёмка — ревизия 1 (${RELEASE_TAG#v})" --notes-file /tmp/notes.md
