@@ -54,8 +54,10 @@ jobs:
           from pathlib import Path
           with zipfile.ZipFile(os.environ['APK']) as z:
               assert z.testzip() is None
-              for name in ['app.js','editor.js','tours.js','revision.js','xlsx.js','pb-catalog.js','native.js','index.html','style.css','zip.js','iphone.html','sw.js']:
+              for name in ['pdf-viewer.js','pdf-engine.mjs','pdf-worker.mjs','app.js','editor.js','tours.js','revision.js','xlsx.js','pb-catalog.js','native.js','index.html','style.css','zip.js','iphone.html','sw.js']:
                   assert z.read('assets/public/'+name)==Path('docs',name).read_bytes(),name
+              for font in list(Path('docs').glob('*.pfb'))+list(Path('docs').glob('*.ttf')):
+                  assert z.read('assets/public/'+font.name)==font.read_bytes(),font.name
               assert json.loads(z.read('assets/capacitor.config.json'))['appId']=='ru.dmitrymitr.priemka'
           print('Verified checksum, archive CRC, release source files, app ID and unchanged signing certificate.')
           PY
