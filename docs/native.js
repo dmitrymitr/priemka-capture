@@ -1,6 +1,6 @@
 // Native plugins are provided by Capacitor only in the installed APK.
 window.isPriemkaNative = () => !!window.Capacitor?.isNativePlatform?.();
-window.shareNativeArchive = async (blob, filename) => {
+window.shareNativeArchive = async (blob, filename, labels = {}) => {
   const fs = window.Capacitor.registerPlugin('Filesystem');
   const share = window.Capacitor.registerPlugin('Share');
   const folder = `exports/${Date.now()}-${crypto.randomUUID().slice(0,8)}`;
@@ -20,5 +20,5 @@ window.shareNativeArchive = async (blob, filename) => {
   const info = await fs.stat({path,directory:'CACHE'});
   if (info.size !== blob.size) throw Error('Архив записан не полностью. Попробуй выгрузку ещё раз.');
   const {uri} = await fs.getUri({path,directory:'CACHE'});
-  await share.share({title:'Обход — Приёмка',files:[uri],dialogTitle:'Передать архив обхода'});
+  await share.share({title:labels.title||'Обход — Приёмка',files:[uri],dialogTitle:labels.dialogTitle||'Передать архив обхода'});
 };

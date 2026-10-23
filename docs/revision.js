@@ -45,12 +45,11 @@ async function preparePDFs(files,tour){
  return ops;
 }
 async function showDocuments(){
- await stash();if(pdfTourId!==activeTour.id){pdfTourId=activeTour.id;$('pdfFrame').src='about:blank';$('pdfViewer').hidden=true;revoke(pdfURLs);}$('pdfList').replaceChildren();
+ await stash();if(pdfTourId!==activeTour.id){pdfTourId=activeTour.id;resetPDF();$('pdfViewer').hidden=true;revoke(pdfURLs);}$('pdfList').replaceChildren();
  for(const doc of activeTour.documents||[]){
   const row=element('div','');row.className='actions';row.append(button(doc.name,async()=>{
-   const saved=await read('media',doc.id);if(!saved)throw Error('PDF не найден на устройстве.');
-   revoke(pdfURLs);const url=URL.createObjectURL(saved.blob);pdfURLs.push(url);$('pdfFrame').src=url;$('pdfExternal').href=url;$('pdfViewer').hidden=false;
-  }),button('Удалить PDF',async()=>{if(!confirm('Удалить этот PDF из обхода?'))return;const next=structuredClone(activeTour);next.documents=next.documents.filter(d=>d.id!==doc.id);await enqueue([tourOp(next),{store:'media',id:doc.id,delete:true}]);activeTour=next;$('pdfFrame').src='about:blank';$('pdfViewer').hidden=true;revoke(pdfURLs);await showDocuments();},'plain'));$('pdfList').append(row);
+   await openPDF(doc);
+  }),button('Удалить PDF',async()=>{if(!confirm('Удалить этот PDF из обхода?'))return;const next=structuredClone(activeTour);next.documents=next.documents.filter(d=>d.id!==doc.id);await enqueue([tourOp(next),{store:'media',id:doc.id,delete:true}]);activeTour=next;resetPDF();$('pdfViewer').hidden=true;revoke(pdfURLs);await showDocuments();},'plain'));$('pdfList').append(row);
  }
  if(!activeTour.documents?.length)$('pdfList').textContent='Документов пока нет. Добавь PDF с планировками.';
  if(!$('documentsDialog').open)$('documentsDialog').showModal();
@@ -113,7 +112,7 @@ async function exportUI(){
   b.onclick=async()=>{b.disabled=true;b.textContent='Собираем Excel с фотографиями…';try{
    const t={...tour,section:group.section};const workbook=await makeDefectWorkbook(group.notes,t);const name=archiveName(t,group.part,group.total);const zip=await makeZip([{name:name.replace(/\.zip$/,'.xlsx'),blob:workbook}]);b.textContent=`Готово · ${(zip.size/1048576).toFixed(1)} МБ`;
    const save=element('button','1. Скачать ZIP');save.className='secondary';save.onclick=()=>downloadFile(zip,name);
-   const preview=element('button','Посмотреть / скачать Excel');preview.className='secondary';preview.onclick=()=>downloadFile(workbook,name.replace(/\.zip$/,'.xlsx'));
+   const preview=element('button','2. Посмотреть / скачать Excel');preview.className='secondary';preview.onclick=()=>downloadFile(workbook,name.replace(/\.zip$/,'.xlsx'));
    const share=element('button','3. Передать / поделиться ZIP');share.className='secondary';const file=new File([zip],name,{type:'application/zip'});
    share.onclick=async()=>{try{if(window.isPriemkaNative?.())await window.shareNativeArchive(zip,name);else if(navigator.canShare?.({files:[file]}))await navigator.share({files:[file],title:tour.object});else {downloadFile(zip,name);msg('Файл скачан. Открой «Загрузки», выбери ZIP → «Поделиться».');}}catch(e){if(e.name!=='AbortError')fail(e);}};
    box.append(save,preview,share);
@@ -151,6 +150,7 @@ function bindRevision(){
  $('settingsButton').onclick=()=>{ $('prefTypical').checked=preferences.typical;$('prefBurst').checked=preferences.burst;$('tourOptions').hidden=!activeTour||view==='home';$('tourTypical').checked=tourOption('typical');$('tourBurst').checked=tourOption('burst');$('settingsDialog').showModal();};
  $('saveSettings').onclick=()=>guarded(async()=>{const next={typical:$('prefTypical').checked,burst:$('prefBurst').checked};const ops=[{store:'state',value:{id:'preferences',data:next}}];let tour;if(activeTour&&view!=='home'){tour=structuredClone(activeTour);tour.options={typical:$('tourTypical').checked,burst:$('tourBurst').checked};ops.push(tourOp(tour));}await enqueue(ops);preferences=next;if(tour)activeTour=tour;$('settingsDialog').close();suggestViolations('text','suggestions');});
  $('documentsButton').onclick=()=>guarded(showDocuments);$('closeDocuments').onclick=()=>$('documentsDialog').close();
+ bindPDF();
  $('addPDFs').onchange=e=>guarded(async()=>{const next=structuredClone(activeTour);const ops=await preparePDFs([...e.target.files],next);await enqueue([...ops,tourOp(next)]);activeTour=next;e.target.value='';await showDocuments();});
  $('changeSection').onclick=()=>{$('nextSection').value=activeTour.section;$('sectionDialog').showModal();};
  $('sectionForm').onsubmit=e=>{e.preventDefault();guarded(async()=>{const section=$('nextSection').value.trim();if(!section)throw Error('Укажи раздел.');await prepareDraft();const next=structuredClone(activeTour);next.section=section;await commitCapture(next);$('sectionDialog').close();await captureView();});};

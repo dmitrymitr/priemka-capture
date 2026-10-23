@@ -11,3 +11,20 @@ select{font:inherit;width:100%;min-height:48px;padding:10px;border:1px solid #b9
 .check{display:flex;align-items:center;gap:12px;margin:16px 0}.check input{width:22px;height:22px}.suggestions button{display:block;text-align:left;width:100%;margin:6px 0;font-size:15px}.editAttachment{position:relative;min-width:120px}#pdfFrame{width:100%;height:65dvh;border:0}#burstVideo{width:100%;max-height:60dvh;background:#111}#shareImageList img{max-width:180px}dialog{max-height:92dvh;overflow:auto}#parts button{margin:6px 0}.exportPart{padding:12px 0;border-top:1px solid #ccd}button:disabled{opacity:.55}input[type=file]{max-width:100%}
 
 .quickTools{position:sticky;top:0;z-index:5;background:#edf2f5;padding:8px 0}.check input{min-height:22px;padding:0;margin:0;flex:none}
+
+/* Comfortable touch spacing, including dynamically created record actions. */
+.actions{gap:14px}.topline,.dialogHead{gap:16px;flex-wrap:wrap}
+button+button{margin-top:12px}
+.actions>button,.topline>button,.dialogHead>button,.pdfControls>button{margin:0}
+#records button{display:block;margin:12px 0 0}
+.tourCard button,.roomCard button{margin:12px 12px 0 0}
+#settingsDialog>button,#burstDialog>button,#sectionForm>button{display:block;width:100%;margin-top:14px}
+#parts button{margin:14px 0}#closeExport{margin-top:18px}
+.gallery{margin:14px auto}.suggestions button{margin:12px 0}
+#documentsDialog{padding-top:0;width:min(1000px,96vw)}
+.pdfHeader{position:sticky;top:0;z-index:10;background:white;padding:14px 0 8px;box-shadow:0 4px 8px #ffffff}
+.pdfHeader h2{margin:12px 0 0}.pdfHeader .finish{font-size:17px;min-height:48px}
+.pdfControls{display:flex;flex-wrap:wrap;gap:12px;align-items:center;margin:16px 0}
+#pdfViewport{overflow:auto;max-height:65dvh;background:#e3e8ec;touch-action:pan-x pan-y pinch-zoom}
+#pdfCanvas{display:block;background:white}#pdfViewer{scroll-margin-top:125px}
+#pdfStatus{overflow-wrap:anywhere}#pdfList .actions>button{overflow-wrap:anywhere;min-width:0;flex-basis:220px}
