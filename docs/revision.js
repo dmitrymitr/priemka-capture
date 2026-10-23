@@ -93,7 +93,7 @@ function archiveName(tour,part,total=1){
 }
 function exportGroups(notes){
  const sections=new Map();for(const note of notes){const key=note.section||'Без раздела';if(!sections.has(key))sections.set(key,[]);sections.get(key).push(note);}
- const result=[];for(const [section,rows] of sections){const parts=[];let group=[],size=0;for(const n of rows){const bytes=n.media.reduce((s,m)=>s+m.size,0);if(group.length&&(group.length>=25||size+bytes>150*1048576)){parts.push(group);group=[];size=0;}group.push(n);size+=bytes;}if(group.length)parts.push(group);parts.forEach((g,i)=>result.push({section,notes:g,part:i+1,total:parts.length}));}return result;
+ const result=[];for(const [section,rows] of sections){const parts=[];let group=[],size=0;for(const n of rows){const bytes=n.media.reduce((s,m)=>s+m.size,0);if(group.length&&(group.length>=25||size+bytes>50*1048576)){parts.push(group);group=[];size=0;}group.push(n);size+=bytes;}if(group.length)parts.push(group);parts.forEach((g,i)=>result.push({section,notes:g,part:i+1,total:parts.length}));}return result;
 }
 function downloadFile(blob,name){const url=URL.createObjectURL(blob),a=element('a','');a.href=url;a.download=name;document.body.append(a);a.click();a.remove();setTimeout(()=>URL.revokeObjectURL(url),120000);}
 async function exportPart(notes,part,tour,total=1){
@@ -101,25 +101,58 @@ async function exportPart(notes,part,tour,total=1){
  const zip=await makeZip([{name:name.replace(/\.zip$/,'.xlsx'),blob:workbook}]);
  if(window.isPriemkaNative?.())await window.shareNativeArchive(zip,name);else downloadFile(zip,name);return zip.size;
 }
+let exportController=null;
+async function makeSourceArchive(notes,tour,part,total,options={}){
+ const files=[],seen=new Set(),manifest={format:'priemka-capture/2',appVersion:'1.1.2',deletedNotes:tour.deletedNotes||[],exported:new Date().toISOString(),part,totalParts:total,tour,notes:[]};
+ const rows=[['id','дата','объект','специалист','раздел','место','текст','вложения','статус']];
+ for(const note of notes){
+  checkExport(options.signal);const record=structuredClone(note);
+  for(const media of record.media){
+   checkExport(options.signal);media.path=mediaName(media);
+   if(!seen.has(media.id)){const saved=await read('media',media.id);if(!saved?.blob)throw Error('Не найдено вложение: '+media.id);files.push({name:media.path,blob:saved.blob});seen.add(media.id);}
+  }
+  manifest.notes.push(record);rows.push([record.id,record.created,record.object,record.author,record.section,record.location,record.text,record.media.map(m=>m.path).join(' | '),record.status==='draft'?'Черновик — проверить':'Зафиксировано — требует проверки']);await exportYield();
+ }
+ files.push({name:'observations.json',blob:new Blob([JSON.stringify(manifest,null,2)],{type:'application/json'})},
+ {name:'observations.csv',blob:new Blob(['\ufeff'+rows.map(r=>r.map(csvCell).join(';')).join('\r\n')],{type:'text/csv;charset=utf-8'})},
+ {name:'README.txt',blob:new Blob(['Приёмка 1.1.2. Быстрый исходный формат priemka-capture/2. Комментарии — observations.json и observations.csv; исходные фото и аудио — папка media. Файлы не перекодируются. Используйте все части последней выгрузки выбранного раздела. При объединении обновляйте записи по id и updated, учитывайте deletedNotes. Черновики помечены status=draft. PDF-планы не включены: сохраните их отдельно из «Планы / PDF». Автоматического восстановления приложения из архива нет. Данные на устройстве не удаляются.'])});
+ return makeZip(files,options);
+}
 async function exportUI(){
  await stash();await queue;if(fault)throw Error('Ошибка сохранения. Проверь данные перед выгрузкой.');
- const tour=structuredClone(activeTour),notes=await tourNotes();if(hasDraft())notes.push(structuredClone(draft));const groups=exportGroups(notes);
- $('exportTitle').textContent=`Передать обход: ${tour.object}`;$('parts').replaceChildren();
- if(!groups.length)$('parts').textContent='В обходе пока нет записей.';
- for(const group of groups){
-  const box=element('div','');box.className='exportPart';box.append(element('p',`${group.section} · часть ${group.part} из ${group.total} · записей: ${group.notes.length}`));
-  const b=element('button','Подготовить Excel и ZIP');b.className='finish';box.append(b);
-  b.onclick=async()=>{b.disabled=true;b.textContent='Собираем Excel с фотографиями…';try{
-   const t={...tour,section:group.section};const workbook=await makeDefectWorkbook(group.notes,t);const name=archiveName(t,group.part,group.total);const zip=await makeZip([{name:name.replace(/\.zip$/,'.xlsx'),blob:workbook}]);b.textContent=`Готово · ${(zip.size/1048576).toFixed(1)} МБ`;
-   const save=element('button','1. Скачать ZIP');save.className='secondary';save.onclick=()=>downloadFile(zip,name);
-   const preview=element('button','2. Посмотреть / скачать Excel');preview.className='secondary';preview.onclick=()=>downloadFile(workbook,name.replace(/\.zip$/,'.xlsx'));
-   const share=element('button','3. Передать / поделиться ZIP');share.className='secondary';const file=new File([zip],name,{type:'application/zip'});
-   share.onclick=async()=>{try{if(window.isPriemkaNative?.())await window.shareNativeArchive(zip,name);else if(navigator.canShare?.({files:[file]}))await navigator.share({files:[file],title:tour.object});else {downloadFile(zip,name);msg('Файл скачан. Открой «Загрузки», выбери ZIP → «Поделиться».');}}catch(e){if(e.name!=='AbortError')fail(e);}};
-   box.append(save,preview,share);
-  }catch(e){b.disabled=false;b.textContent='Повторить подготовку';box.append(element('p',e.message));fail(e);}};
-  $('parts').append(box);
- }
- $('exportDialog').showModal();
+ exportController?.abort();const tour=structuredClone(activeTour),notes=await tourNotes();if(hasDraft())notes.push(structuredClone(draft));const groups=exportGroups(notes);
+ $('exportTitle').textContent=`Передать обход: ${tour.object}`;$('exportFormat').value='source';
+ const render=()=>{
+  exportController?.abort();$('parts').replaceChildren();const source=$('exportFormat').value==='source';
+  $('exportFormatHelp').textContent=source?'Быстрее: комментарии JSON/CSV и папка media с исходными фото и аудио. PDF сохрани отдельно из «Планы / PDF».':'Готовая Excel-ведомость с фотографиями в отдельных столбцах. Подготовка занимает больше времени; исходные аудио и PDF не включены.';
+  if(!groups.length)$('parts').textContent='В обходе пока нет записей.';
+  for(const group of groups){
+   const box=element('div','');box.className='exportPart';const bytes=group.notes.reduce((sum,n)=>sum+n.media.reduce((s,m)=>s+(m.size||0),0),0);
+   box.append(element('p',`${group.section} · часть ${group.part} из ${group.total} · записей: ${group.notes.length} · вложения ${(bytes/1048576).toFixed(1)} МБ`));
+   if(bytes>50*1048576)box.append(element('p','Одно замечание больше 50 МБ: выгружается целиком. Подготовку можно отменить.'));
+   const prepare=element('button',source?'Подготовить быстрый ZIP':'Подготовить Excel и ZIP');prepare.className='finish';prepare.dataset.exportPrepare='true';
+   const status=element('p','');status.setAttribute('role','status');const cancel=element('button','Отменить подготовку');cancel.className='secondary';cancel.hidden=true;
+   const result=element('div','');result.className='exportResult';box.append(prepare,status,cancel,result);$('parts').append(box);
+   prepare.onclick=async()=>{
+    exportController?.abort();const controller=new AbortController();exportController=controller;const {signal}=controller;
+    // Keep only the current prepared part in memory, not every archive in the tour.
+    document.querySelectorAll('.exportResult').forEach(el=>el.replaceChildren());
+    document.querySelectorAll('[data-export-prepare]').forEach(b=>b.disabled=true);cancel.hidden=false;cancel.disabled=false;status.textContent='Подготовка…';cancel.onclick=()=>{controller.abort();cancel.disabled=true;status.textContent='Отменяем…';};
+    try{
+     const t={...tour,section:group.section},name=archiveName(t,group.part,group.total);let workbook;
+     const progress=(done,total)=>{status.textContent=`Собираем ZIP: ${total?Math.floor(done/total*100):0}%`;};
+     const zip=source?await makeSourceArchive(group.notes,t,group.part,group.total,{signal,onProgress:progress}):await (async()=>{workbook=await makeDefectWorkbook(group.notes,t,{signal,onProgress:(i,n)=>{status.textContent=`Excel: замечание ${i+1} из ${n}`;}});return makeZip([{name:name.replace(/\.zip$/,'.xlsx'),blob:workbook}],{signal,onProgress:progress});})();
+     checkExport(signal);status.textContent=`Готово · ${(zip.size/1048576).toFixed(1)} МБ`;
+     const save=element('button','1. Скачать ZIP');save.className='secondary';save.onclick=()=>downloadFile(zip,name);result.append(save);
+     if(workbook){const preview=element('button','2. Посмотреть / скачать Excel');preview.className='secondary';preview.onclick=()=>downloadFile(workbook,name.replace(/\.zip$/,'.xlsx'));result.append(preview);}
+     const share=element('button',`${source?'2':'3'}. Передать / поделиться ZIP`);share.className='secondary';
+     share.onclick=async()=>{share.disabled=true;try{if(window.isPriemkaNative?.())await window.shareNativeArchive(zip,name);else{const file=new File([zip],name,{type:'application/zip'});if(navigator.canShare?.({files:[file]}))await navigator.share({files:[file],title:tour.object});else downloadFile(zip,name);}}catch(e){if(e.name!=='AbortError')status.textContent=e.message;}finally{share.disabled=false;}};result.append(share);
+    }catch(e){status.textContent=e.name==='AbortError'?'Подготовка отменена. Записи сохранены.':e.message;}
+    finally{cancel.hidden=true;if(exportController===controller){exportController=null;document.querySelectorAll('[data-export-prepare]').forEach(b=>b.disabled=false);}}
+   };
+  }
+ };
+ $('exportFormat').onchange=render;render();$('exportDialog').showModal();
 }
 async function showStorage(){
  await queue;$('storageTours').replaceChildren();const notes=await allNotes();
@@ -141,6 +174,7 @@ async function deleteTourData(id){
  await enqueue(ops);clearSnapshot(id);if(activeTour?.id===id){activeTour=null;draft=fresh({});}await showHome();updateRevisionContext();
 }
 function bindRevision(){
+ $('exportDialog').addEventListener('close',()=>{exportController?.abort();$('parts').replaceChildren();});
  // Keep the last session before showHome writes a new navigation state.
  let resume;try{resume=localStorage.getItem('priemka-session');}catch{}
  const originalRestore=restoreSession;restoreSession=async()=>{if(resume)try{localStorage.setItem('priemka-session',resume);}catch{}await originalRestore();};

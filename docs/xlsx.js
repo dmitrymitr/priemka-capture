@@ -6,7 +6,7 @@ async function workbookImage(blob){
   const jpeg=await new Promise(r=>canvas.toBlob(r,'image/jpeg',.85));if(!jpeg)throw Error('Не удалось подготовить фото для Excel.');return {blob:jpeg,width:canvas.width,height:canvas.height};
  }catch{throw Error('Не удалось прочитать одну из фотографий для Excel. Открой её на устройстве и замени на JPEG/PNG. Исходное фото остаётся в обходе.');}finally{URL.revokeObjectURL(url);}
 }
-async function makeDefectWorkbook(notes,tour){
+async function makeDefectWorkbook(notes,tour,{signal,onProgress=()=>{}}={}){
  const files=[],images=[],rows=[];
  const photoColumns=Math.max(1,...notes.map(n=>n.media.filter(m=>m.kind==='photo').length));
  const columnName=index=>{let name='';for(let n=index+1;n;n=Math.floor((n-1)/26))name=String.fromCharCode(65+(n-1)%26)+name;return name;};
@@ -18,12 +18,13 @@ async function makeDefectWorkbook(notes,tour){
  appendRow([`Раздел: ${tour.section} · ${new Date(tour.created).toLocaleDateString('ru-RU')} · ${tour.author||''}`],25);
  appendRow(['№','Раздел','Описание дефекта','Местонахождение','Статус',...Array.from({length:photoColumns},(_,i)=>`Фото ${i+1}`),'Примечания'],28,1);
  for(const [index,note] of notes.entries()){
+  checkExport(signal);onProgress(index,notes.length);await exportYield();
   const photos=note.media.filter(m=>m.kind==='photo');const status=note.status==='draft'?'Черновик — проверить':'Новое замечание';
   let text=note.text||'Описание не заполнено — требуется уточнение';
   const annotation=note.media.some(m=>m.kind==='audio')?'Есть прежнее аудио на устройстве; в Excel не включено.':'';
   const row=appendRow([index+1,note.section,text,note.location,status,...Array(photoColumns).fill(''),annotation],Math.min(409,Math.max(photos.length?120:48,Math.ceil(text.length/65)*16)));
   for(const [j,photo] of photos.entries()){
-   const media=await read('media',photo.id);if(!media?.blob)throw Error('Не найдено фото для ведомости. Выгрузка отменена.');const image=await workbookImage(media.blob);images.push({...image,row,col:5+j});
+   checkExport(signal);const media=await read('media',photo.id);if(!media?.blob)throw Error('Не найдено фото для ведомости. Выгрузка отменена.');const image=await workbookImage(media.blob);images.push({...image,row,col:5+j});
   }
  }
  add('[Content_Types].xml',`<?xml version="1.0" encoding="UTF-8"?><Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types"><Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/><Default Extension="xml" ContentType="application/xml"/><Default Extension="jpg" ContentType="image/jpeg"/><Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/><Override PartName="/xl/worksheets/sheet1.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/><Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>${images.length?'<Override PartName="/xl/drawings/drawing1.xml" ContentType="application/vnd.openxmlformats-officedocument.drawing+xml"/>':''}</Types>`);
@@ -38,5 +39,5 @@ async function makeDefectWorkbook(notes,tour){
   const anchors=images.map((image,i)=>{const scale=Math.min(270/image.width,148/image.height),w=Math.round(image.width*scale*9525),h=Math.round(image.height*scale*9525);files.push({name:`xl/media/image${i+1}.jpg`,blob:image.blob});return `<xdr:oneCellAnchor><xdr:from><xdr:col>${image.col}</xdr:col><xdr:colOff>38100</xdr:colOff><xdr:row>${image.row-1}</xdr:row><xdr:rowOff>38100</xdr:rowOff></xdr:from><xdr:ext cx="${w}" cy="${h}"/><xdr:pic><xdr:nvPicPr><xdr:cNvPr id="${i+1}" name="Фото ${i+1}"/><xdr:cNvPicPr><a:picLocks noChangeAspect="1"/></xdr:cNvPicPr></xdr:nvPicPr><xdr:blipFill><a:blip r:embed="rId${i+1}"/><a:stretch><a:fillRect/></a:stretch></xdr:blipFill><xdr:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${w}" cy="${h}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></xdr:spPr></xdr:pic><xdr:clientData/></xdr:oneCellAnchor>`;}).join('');
   add('xl/drawings/drawing1.xml',`<xdr:wsDr xmlns:xdr="http://schemas.openxmlformats.org/drawingml/2006/spreadsheetDrawing" xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" xmlns:r="${rel}">${anchors}</xdr:wsDr>`);
  }
- const zip=await makeZip(files);return new Blob([zip],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
+ const zip=await makeZip(files,{signal});return new Blob([zip],{type:'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet'});
 }
