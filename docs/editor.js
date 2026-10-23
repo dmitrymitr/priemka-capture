@@ -1,6 +1,6 @@
 'use strict';
 let editing=null,editorURLs=[],listRoomFilter=null,editorReturnList=false;
-function editorDirty(){return editing&&(editing.text!==$('editText').value||editing.roomId!==$('editRoom').value||$('editNewRoom').value.trim()||editing.changed);}
+function editorDirty(){return editing&&(editing.text!==$('editText').value||editing.roomId!==$('editRoom').value||$('editNewRoom').value.trim()||editing.changed||editing.section!==$('editSection').value);}
 function updateEditorRoom(){ $('editNewRoomLabel').hidden=$('editRoom').value!=='__new'; }
 async function openEditor(noteId=null,roomId=null,fromList=false){
  await queue;
@@ -9,7 +9,7 @@ async function openEditor(noteId=null,roomId=null,fromList=false){
  editing=original?structuredClone(original):fresh({object:activeTour.object,author:activeTour.author,section:activeTour.section,tourId:activeTour.id,roomId:roomId||activeTour.activeRoomId||activeTour.rooms[0]?.id,location:''});
  editing.isNew=!original;editing.pendingBlobs=new Map();editing.changed=false;editorReturnList=fromList;
  $('editTitle').textContent=original?'Редактировать замечание':'Добавить замечание';
- $('editText').value=editing.text;$('editNewRoom').value='';$('editRoom').replaceChildren();
+ $('editText').value=editing.text;$('editSection').value=editing.section;$('editSuggestions').replaceChildren();$('editNewRoom').value='';$('editRoom').replaceChildren();
  for(const r of activeTour.rooms){const o=element('option',r.name);o.value=r.id;$('editRoom').append(o);}
  const option=element('option','＋ Новое помещение');option.value='__new';$('editRoom').append(option);
  $('editRoom').value=editing.roomId||'__new';updateEditorRoom();
@@ -60,7 +60,7 @@ async function saveEditor(){
  const original=editing.isNew?null:await read('notes',editing.id);
  if(!editing.isNew&&!original)throw Error('Замечание уже удалено. Закрой карточку и обнови список.');
  const {pendingBlobs,isNew,changed,...data}=editing;
- const note={...data,text,roomId:room.id,location:room.name,status:'captured',finished:original?.finished||now,updated:now};
+ const note={...data,text,section:$('editSection').value.trim()||data.section,roomId:room.id,location:room.name,status:'captured',finished:original?.finished||now,updated:now};
  const ops=[];
  for(const m of note.media){
   const blob=pendingBlobs.get(m.id)||(await read('media',m.id))?.blob;
@@ -92,11 +92,11 @@ async function deleteNote(id){
  await showList(listRoomFilter);msg('Замечание удалено. Выгрузи новый ZIP для передачи актуального обхода.');
 }
 function bindEditor(){
- $('editRoom').onchange=updateEditorRoom;
+ $('editRoom').onchange=updateEditorRoom;$('editText').addEventListener('input',()=>suggestViolations('editText','editSuggestions'));
  $('editForm').onsubmit=e=>{e.preventDefault();guarded(saveEditor);};
  $('editCancel').onclick=()=>guarded(cancelEditor);
  $('editDialog').addEventListener('cancel',e=>{e.preventDefault();if(!busy)guarded(cancelEditor);});
- $('editCameraButton').onclick=()=>$('editCamera').click();$('editGalleryButton').onclick=()=>$('editGallery').click();
+ $('editCameraButton').onclick=()=>startPhotoCapture(true);$('editGalleryButton').onclick=()=>$('editGallery').click();
  for(const id of ['editCamera','editGallery'])$(id).onchange=async e=>{await editorPhotos([...e.target.files]);e.target.value='';};
  $('addNote').onclick=()=>guarded(()=>openEditor());
  $('listAddNote').onclick=()=>guarded(()=>openEditor(null,listRoomFilter,true));

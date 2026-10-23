@@ -32,7 +32,7 @@ async function migrateTours(){
  await write(ops);
 }
 
-function screen(name){view=name;for(const id of ['home','tour','capture'])$(id+'View').hidden=id!==name;msg('');window.scrollTo(0,0);}
+function screen(name){view=name;rememberSession(name);for(const id of ['home','tour','capture'])$(id+'View').hidden=id!==name;msg('');window.scrollTo(0,0);}
 function element(tag,text){const el=document.createElement(tag);el.textContent=text;return el;}
 function button(text,action,cls='secondary'){const b=element('button',text);b.type='button';b.dataset.guarded='true';b.disabled=busy;b.className=cls;b.onclick=()=>guarded(action);return b;}
 async function guarded(action){
@@ -56,11 +56,11 @@ async function loadTour(id){
  if(activeTour)await stash();
  activeTour=await read('tours',id);
  if(!activeTour)throw Error('Обход не найден. Вернись в список.');
- draft=(await read('state',`draft:${id}`))?.data||fresh(currentContext());
+ draft=(await read('state',`draft:${id}`))?.data||fresh(currentContext());await recoverDraft();
  await tourView();
 }
 async function tourView(){
- screen('tour');$('tourTitle').textContent=activeTour.object;
+ screen('tour');updateRevisionContext();$('tourTitle').textContent=activeTour.object;
  $('tourMeta').textContent=`${activeTour.section} · ${activeTour.author} · ${dateLabel(activeTour.created)} · ${activeTour.status==='completed'?'Завершён':'В работе'}`;
  const editable=activeTour.status==='active';
  $('resumeRoom').hidden=!editable||!activeRoom();
@@ -77,7 +77,7 @@ async function tourView(){
 }
 async function captureView(){
  if(activeTour.status!=='active'||!activeRoom())return tourView();
- screen('capture');$('text').value=draft.text;contextLabel();await renderMedia();await refreshCount();
+ screen('capture');updateRevisionContext();$('text').value=draft.text;contextLabel();await renderMedia();await refreshCount();
  if(draft.media.some(m=>m.interrupted))msg('В черновике есть прерванная запись. Прослушай её и допиши при необходимости.',true);
 }
 async function prepareDraft(){
@@ -94,7 +94,7 @@ async function commitCapture(nextTour=activeTour){
  const next=fresh({object:nextTour.object,author:nextTour.author,section:nextTour.section,tourId:nextTour.id,roomId:room?.id||null,location:room?.name||''});
  ops.push(tourOp(nextTour),...draftOps(next,nextTour));
  await enqueue(ops);
- activeTour=nextTour;draft=next;$('text').value='';
+ activeTour=nextTour;draft=next;clearSnapshot(nextTour.id);$('text').value='';$('suggestions').replaceChildren();
 }
 async function changeRoom(existingId,newName){
  await prepareDraft();
@@ -120,13 +120,13 @@ async function endTour(){
 }
 async function roomDialog(){await stash();$('roomName').value='';$('roomDialog').showModal();$('roomName').focus();}
 function bindTours(){
- $('newTour').onclick=()=>guarded(async()=>{const ctx=(await read('state','context'))?.data||{};for(const k of fields)$(k).value=k==='location'?'':ctx[k]||'';$('newDialog').showModal();});
+ $('newTour').onclick=()=>guarded(async()=>{const ctx=(await read('state','context'))?.data||{};for(const k of fields)$(k).value=k==='location'?'':ctx[k]||'';$('newTypical').checked=preferences.typical;$('newBurst').checked=preferences.burst;$('newPDFs').value='';$('newDialog').showModal();});
  $('newForm').onsubmit=e=>{e.preventDefault();guarded(async()=>{
   const ctx=Object.fromEntries(fields.map(k=>[k,$(k).value.trim()]));if(fields.some(k=>!ctx[k]))throw Error('Заполни проект, специалиста, раздел и первое помещение.');
   const now=new Date().toISOString(),room={id:uid(),name:ctx.location,created:now,status:'active'};
-  const t={id:uid(),object:ctx.object,author:ctx.author,section:ctx.section,created:now,status:'active',rooms:[room],activeRoomId:room.id};
+  const t={id:uid(),object:ctx.object,author:ctx.author,section:ctx.section,created:now,status:'active',rooms:[room],activeRoomId:room.id,options:{typical:$('newTypical').checked,burst:$('newBurst').checked}};
   const d=fresh({...ctx,tourId:t.id,roomId:room.id});
-  await enqueue([tourOp(t),...draftOps(d,t),{store:'state',value:{id:'context',data:ctx}}]);
+  const pdfOps=await preparePDFs([...$('newPDFs').files],t);await enqueue([...pdfOps,tourOp(t),...draftOps(d,t),{store:'state',value:{id:'context',data:ctx}}]);
   activeTour=t;draft=d;$('newDialog').close();await captureView();navigator.storage?.persist?.().catch(()=>{});
  });};
  $('roomForm').onsubmit=e=>{e.preventDefault();guarded(async()=>{const name=$('roomName').value.trim();if(!name)throw Error('Укажи помещение.');const existing=activeTour.rooms.find(r=>r.name.toLocaleLowerCase()===name.toLocaleLowerCase());await changeRoom(existing?.id,name);$('roomDialog').close();});};
