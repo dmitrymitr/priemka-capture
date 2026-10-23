@@ -43,8 +43,9 @@ jobs:
         run: |
           "$ANDROID_HOME/build-tools/35.0.0/apksigner" verify --verbose android/app/build/outputs/apk/release/app-release.apk
           mkdir -p output
-          cp android/app/build/outputs/apk/release/app-release.apk output/Priemka-1.0.2.apk
-          sha256sum output/Priemka-1.0.2.apk > output/SHA256SUMS.txt
+          VERSION=$(node -p "require('./package.json').version")
+          cp android/app/build/outputs/apk/release/app-release.apk "output/Priemka-$VERSION.apk"
+          sha256sum "output/Priemka-$VERSION.apk" > output/SHA256SUMS.txt
       - uses: actions/upload-artifact@v4
         with:
           name: priemka-apk
