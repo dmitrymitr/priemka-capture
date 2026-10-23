@@ -11,7 +11,7 @@ async function openPDF(doc){
   const saved=await read('media',doc.id);if(!saved?.blob)throw Error('PDF не найден на устройстве.');
   if(generation!==pdfGeneration)return;
   pdfFile=new File([saved.blob],doc.name,{type:'application/pdf'});$('pdfExternal').disabled=false;
-  const pdfjs=await import('./pdf-engine.mjs');pdfjs.GlobalWorkerOptions.workerSrc=new URL('./pdf-worker.mjs',location.href).href;
+  const pdfjs=await import('./pdf-engine.js');pdfjs.GlobalWorkerOptions.workerSrc=new URL('./pdf-worker.js',location.href).href;
   const data=new Uint8Array(await pdfFile.arrayBuffer());if(generation!==pdfGeneration)return;
   pdfTask=pdfjs.getDocument({data,standardFontDataUrl:new URL('./',location.href).href,isEvalSupported:false});
   pdfTask.onPassword=(update,reason)=>{const password=prompt(reason===2?'Неверный пароль. Введи пароль PDF ещё раз:':'Введи пароль PDF:');if(password===null){resetPDF();return;}update(password);};
